@@ -72,7 +72,7 @@ Artefatos:
 - Ubuntu/Linux x64: `.AppImage` sem `--no-sandbox`;
 - macOS universal (Intel + Apple Silicon): `.dmg` para instalação e `.zip` para o updater.
 
-Builds de macOS devem ser executados em macOS. A workflow `Desktop artifacts and release` pode ser iniciada manualmente em **Actions → Run workflow** e disponibiliza os três pacotes como artifacts por 14 dias, sem criar um GitHub Release. Quando executada sem certificados, a versão manual é apenas para testes e exibirá os avisos normais do Windows SmartScreen/macOS Gatekeeper.
+Builds de macOS devem ser executados em macOS. A workflow `Desktop artifacts and release` pode ser iniciada manualmente em **Actions → Run workflow** e disponibiliza os três pacotes como artifacts por 14 dias, sem criar um GitHub Release. Nesse modo, o workflow desabilita explicitamente assinatura e notarização para não interpretar secrets ausentes como caminhos de certificados; os pacotes são apenas para testes e exibem os avisos normais do Windows SmartScreen/macOS Gatekeeper.
 
 Releases por tag exigem assinatura Authenticode no Windows e Developer ID + notarização no macOS. Configure:
 
