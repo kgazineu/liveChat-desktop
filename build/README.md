@@ -1,8 +1,9 @@
-Adicione aqui os ícones de produção antes da distribuição pública.
+# Recursos de build
 
-Sugestões:
-- icon.ico para Windows;
-- icon.png com pelo menos 512x512 para Linux;
-- icon.icns (ou icon.icon) para macOS.
+Ícones de produção usados pelo `electron-builder`:
+
+- `icon.ico`: executável, instalador NSIS, desinstalador e atalhos do Windows;
+- `icon.png`: AppImage, launcher e janela no Linux;
+- `icon.icns`: bundle e imagem de instalação do macOS.
 
 Não armazene certificados de assinatura neste diretório.

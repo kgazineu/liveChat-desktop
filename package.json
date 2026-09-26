@@ -54,6 +54,7 @@
       "releaseType": "release"
     },
     "win": {
+      "icon": "build/icon.ico",
       "target": [
         {
           "target": "nsis",
@@ -78,6 +79,7 @@
           ]
         }
       ],
+      "icon": "build/icon.icns",
       "category": "public.app-category.social-networking",
       "hardenedRuntime": true,
       "notarize": true,
@@ -89,6 +91,9 @@
       }
     },
     "nsis": {
+      "installerIcon": "build/icon.ico",
+      "uninstallerIcon": "build/icon.ico",
+      "installerHeaderIcon": "build/icon.ico",
       "oneClick": false,
       "allowToChangeInstallationDirectory": true,
       "createDesktopShortcut": true,
@@ -103,6 +108,7 @@
           ]
         }
       ],
+      "icon": "build/icon.png",
       "category": "Network",
       "synopsis": "Cliente desktop do LiveChat",
       "executableArgs": [],
