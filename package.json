@@ -2,6 +2,7 @@
   "name": "live-chat-desktop",
   "version": "1.0.0",
   "description": "Shell desktop seguro para o LiveChat",
+  "desktopName": "livechat.desktop",
   "private": true,
   "type": "module",
   "main": "out/main/index.js",
@@ -13,7 +14,8 @@
     "test": "vitest run",
     "dist": "npm run build && electron-builder",
     "dist:win": "npm run build && electron-builder --win nsis",
-    "dist:linux": "npm run build && electron-builder --linux AppImage"
+    "dist:linux": "npm run build && electron-builder --linux AppImage",
+    "dist:mac": "npm run build && electron-builder --mac dmg zip --universal"
   },
   "dependencies": {
     "electron-updater": "6.8.9"
@@ -61,6 +63,31 @@
         }
       ]
     },
+    "mac": {
+      "target": [
+        {
+          "target": "dmg",
+          "arch": [
+            "universal"
+          ]
+        },
+        {
+          "target": "zip",
+          "arch": [
+            "universal"
+          ]
+        }
+      ],
+      "category": "public.app-category.social-networking",
+      "hardenedRuntime": true,
+      "notarize": true,
+      "entitlements": "build/entitlements.mac.plist",
+      "entitlementsInherit": "build/entitlements.mac.plist",
+      "extendInfo": {
+        "NSCameraUsageDescription": "O LiveChat usa a câmera somente quando você ativa o vídeo em uma chamada.",
+        "NSMicrophoneUsageDescription": "O LiveChat usa o microfone somente durante chamadas autorizadas por você."
+      }
+    },
     "nsis": {
       "oneClick": false,
       "allowToChangeInstallationDirectory": true,
@@ -78,7 +105,7 @@
       ],
       "category": "Network",
       "synopsis": "Cliente desktop do LiveChat",
-      "desktopName": "livechat.desktop",
+      "executableArgs": [],
       "syncDesktopName": true
     }
   },

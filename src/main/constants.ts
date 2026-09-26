@@ -1,5 +1,7 @@
 export const PRODUCTION_APP_URL = 'https://livechat.kaiangazineu.dev';
+export const PRODUCTION_API_URL = 'https://livechat-api.kaiangazineu.dev';
 export const APP_ORIGIN = new URL(PRODUCTION_APP_URL).origin;
+export const API_ORIGIN = new URL(PRODUCTION_API_URL).origin;
 
 export const IPC_CHANNELS = {
   sessionPersist: 'livechat:session:persist',

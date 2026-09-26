@@ -39,6 +39,9 @@ export function secureWebContents(window: BrowserWindow) {
     event.preventDefault();
     void openExternalUrl(targetUrl);
   });
+  window.webContents.on('will-frame-navigate', event => {
+    if (!event.isMainFrame && !isAllowedAppUrl(event.url)) event.preventDefault();
+  });
   window.webContents.setWindowOpenHandler(details => {
     void openExternalUrl(details.url);
     return { action: 'deny' };

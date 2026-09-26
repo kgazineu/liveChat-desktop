@@ -1,26 +1,21 @@
-name: Desktop release
+name: Desktop artifacts and release
 
 on:
+  workflow_dispatch:
   push:
     tags:
       - 'desktop-v*'
 
 permissions:
-  contents: write
+  contents: read
+
+concurrency:
+  group: desktop-${{ github.ref }}
+  cancel-in-progress: false
 
 jobs:
-  build:
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - os: windows-latest
-            command: npm run dist:win -- --publish never
-            artifact: windows
-          - os: ubuntu-latest
-            command: npm run dist:linux -- --publish never
-            artifact: linux
-    runs-on: ${{ matrix.os }}
+  validate:
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -31,37 +26,187 @@ jobs:
       - run: npm ci
       - run: npm test
       - run: npm run typecheck
-      - name: Exigir certificado Authenticode
-        if: runner.os == 'Windows'
+      - run: npm run build
+      - name: Validar tag contra package.json
+        if: startsWith(github.ref, 'refs/tags/desktop-v')
+        run: >-
+          node -e "const version=require('./package.json').version;
+          const expected='desktop-v'+version;
+          if(process.env.GITHUB_REF_NAME!==expected){
+          console.error('Tag esperada: '+expected+', recebida: '+process.env.GITHUB_REF_NAME);
+          process.exit(1)}"
+
+  build:
+    needs: validate
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            command: npm run dist:win -- --publish never
+            artifact: windows-x64
+            artifact_paths: |
+              release/*.exe
+              release/*.exe.blockmap
+              release/latest.yml
+          - os: ubuntu-latest
+            command: npm run dist:linux -- --publish never
+            artifact: linux-x64
+            artifact_paths: |
+              release/*.AppImage
+              release/latest-linux.yml
+          - os: macos-latest
+            command: npm run dist:mac -- --publish never
+            artifact: macos-universal
+            artifact_paths: |
+              release/*.dmg
+              release/*.dmg.blockmap
+              release/*.zip
+              release/*.zip.blockmap
+              release/latest-mac.yml
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: package-lock.json
+      - run: npm ci
+      - name: Instalar display virtual para smoke test
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y xvfb
+
+      - name: Exigir assinatura para release por tag
+        if: startsWith(github.ref, 'refs/tags/desktop-v')
         shell: bash
         env:
-          CSC_LINK: ${{ secrets.WINDOWS_CSC_LINK }}
-          CSC_KEY_PASSWORD: ${{ secrets.WINDOWS_CSC_KEY_PASSWORD }}
+          WINDOWS_CSC_LINK: ${{ secrets.WINDOWS_CSC_LINK }}
+          WINDOWS_CSC_KEY_PASSWORD: ${{ secrets.WINDOWS_CSC_KEY_PASSWORD }}
+          MACOS_CSC_LINK: ${{ secrets.MACOS_CSC_LINK }}
+          MACOS_CSC_KEY_PASSWORD: ${{ secrets.MACOS_CSC_KEY_PASSWORD }}
+          APPLE_API_KEY_BASE64: ${{ secrets.APPLE_API_KEY_BASE64 }}
+          APPLE_API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
+          APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
         run: |
-          if [ -z "$CSC_LINK" ] || [ -z "$CSC_KEY_PASSWORD" ]; then
-            echo "Configure WINDOWS_CSC_LINK e WINDOWS_CSC_KEY_PASSWORD para assinar o instalador."
+          if [ "$RUNNER_OS" = "Windows" ] && { [ -z "$WINDOWS_CSC_LINK" ] || [ -z "$WINDOWS_CSC_KEY_PASSWORD" ]; }; then
+            echo "Configure WINDOWS_CSC_LINK e WINDOWS_CSC_KEY_PASSWORD."
             exit 1
           fi
+          if [ "$RUNNER_OS" = "macOS" ] && { [ -z "$MACOS_CSC_LINK" ] || [ -z "$MACOS_CSC_KEY_PASSWORD" ] || [ -z "$APPLE_API_KEY_BASE64" ] || [ -z "$APPLE_API_KEY_ID" ] || [ -z "$APPLE_API_ISSUER" ]; }; then
+            echo "Configure o certificado Developer ID e as credenciais de notarização da Apple."
+            exit 1
+          fi
+
+      - name: Preparar chave de notarização Apple
+        if: runner.os == 'macOS'
+        shell: bash
+        env:
+          APPLE_API_KEY_BASE64: ${{ secrets.APPLE_API_KEY_BASE64 }}
+        run: |
+          if [ -n "$APPLE_API_KEY_BASE64" ]; then
+            echo "$APPLE_API_KEY_BASE64" | base64 --decode > "$RUNNER_TEMP/AuthKey.p8"
+            chmod 600 "$RUNNER_TEMP/AuthKey.p8"
+            echo "APPLE_API_KEY=$RUNNER_TEMP/AuthKey.p8" >> "$GITHUB_ENV"
+          fi
+
       - name: Gerar instalador
         env:
-          CSC_LINK: ${{ secrets.WINDOWS_CSC_LINK }}
-          CSC_KEY_PASSWORD: ${{ secrets.WINDOWS_CSC_KEY_PASSWORD }}
+          CSC_LINK: ${{ runner.os == 'Windows' && secrets.WINDOWS_CSC_LINK || secrets.MACOS_CSC_LINK }}
+          CSC_KEY_PASSWORD: ${{ runner.os == 'Windows' && secrets.WINDOWS_CSC_KEY_PASSWORD || secrets.MACOS_CSC_KEY_PASSWORD }}
+          APPLE_API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
+          APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
         run: ${{ matrix.command }}
+
+      - name: Validar AppImage e sandbox
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          APPIMAGE=$(find release -maxdepth 1 -name '*.AppImage' -print -quit)
+          "$APPIMAGE" --appimage-extract >/dev/null
+          if grep -R -- '--no-sandbox' squashfs-root/*.desktop; then
+            echo "O AppImage não pode desabilitar a sandbox do Chromium."
+            exit 1
+          fi
+          set +e
+          timeout 20s xvfb-run -a env APPIMAGE_EXTRACT_AND_RUN=1 "$APPIMAGE" >appimage-smoke.log 2>&1
+          STATUS=$?
+          set -e
+          if [ "$STATUS" -ne 124 ]; then
+            cat appimage-smoke.log
+            echo "O AppImage encerrou antes do smoke test."
+            exit 1
+          fi
+
+      - name: Smoke test do pacote Windows
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $process = Start-Process -FilePath release/win-unpacked/LiveChat.exe -PassThru
+          Start-Sleep -Seconds 20
+          if ($process.HasExited) {
+            throw "O aplicativo Windows encerrou precocemente com código $($process.ExitCode)."
+          }
+          Stop-Process -Id $process.Id -Force
+
+      - name: Smoke test do pacote macOS
+        if: runner.os == 'macOS'
+        shell: bash
+        run: |
+          release/mac-universal/LiveChat.app/Contents/MacOS/LiveChat >macos-smoke.log 2>&1 &
+          APP_PID=$!
+          sleep 20
+          if ! kill -0 "$APP_PID" 2>/dev/null; then
+            cat macos-smoke.log
+            echo "O aplicativo macOS encerrou precocemente."
+            exit 1
+          fi
+          kill "$APP_PID"
+
+      - name: Validar assinatura Authenticode
+        if: runner.os == 'Windows' && startsWith(github.ref, 'refs/tags/desktop-v')
+        shell: pwsh
+        run: |
+          $files = @(
+            Get-ChildItem release -Filter *.exe
+            Get-ChildItem release/win-unpacked -Filter *.exe
+          )
+          foreach ($file in $files) {
+            $signature = Get-AuthenticodeSignature $file.FullName
+            if ($signature.Status -ne 'Valid') {
+              throw "Assinatura inválida em $($file.FullName): $($signature.Status)"
+            }
+          }
+
+      - name: Validar assinatura e notarização macOS
+        if: runner.os == 'macOS' && startsWith(github.ref, 'refs/tags/desktop-v')
+        shell: bash
+        run: |
+          codesign --verify --deep --strict --verbose=2 release/mac-universal/LiveChat.app
+          spctl --assess --type execute --verbose=2 release/mac-universal/LiveChat.app
+          xcrun stapler validate release/mac-universal/LiveChat.app
+
       - uses: actions/upload-artifact@v4
         with:
           name: desktop-${{ matrix.artifact }}
-          path: release/*
+          path: ${{ matrix.artifact_paths }}
           if-no-files-found: error
+          retention-days: 14
 
   release:
+    if: startsWith(github.ref, 'refs/tags/desktop-v')
     needs: build
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     steps:
       - uses: actions/download-artifact@v4
         with:
           pattern: desktop-*
           path: artifacts
           merge-multiple: true
+      - name: Gerar checksums independentes
+        run: sha256sum artifacts/* > artifacts/SHA256SUMS
       - uses: softprops/action-gh-release@v2
         with:
           files: artifacts/*

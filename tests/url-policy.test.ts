@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { isAllowedAppUrl, isSafeExternalUrl, parsedHttpUrl } from '../src/main/url-policy';
+import {
+  isAllowedApiUrl,
+  isAllowedAppUrl,
+  isSafeExternalUrl,
+  parsedHttpUrl,
+} from '../src/main/url-policy';
 
 describe('política de URLs', () => {
   it('permite somente HTTPS na origem exata do LiveChat', () => {
@@ -7,6 +12,14 @@ describe('política de URLs', () => {
     expect(isAllowedAppUrl('https://livechat.kaiangazineu.dev.evil.test/chat')).toBe(false);
     expect(isAllowedAppUrl('http://livechat.kaiangazineu.dev/chat')).toBe(false);
     expect(isAllowedAppUrl('https://user@livechat.kaiangazineu.dev/chat')).toBe(false);
+  });
+
+  it('aceita somente a origem HTTPS exata da API de produção', () => {
+    expect(isAllowedApiUrl('https://livechat-api.kaiangazineu.dev')).toBe(true);
+    expect(isAllowedApiUrl('https://livechat-api.kaiangazineu.dev/')).toBe(true);
+    expect(isAllowedApiUrl('https://livechat-api.kaiangazineu.dev.evil.test')).toBe(false);
+    expect(isAllowedApiUrl('http://livechat-api.kaiangazineu.dev')).toBe(false);
+    expect(isAllowedApiUrl('https://livechat-api.kaiangazineu.dev?redirect=evil')).toBe(false);
   });
 
   it('abre externamente apenas URLs HTTP ou HTTPS fora da origem do aplicativo', () => {

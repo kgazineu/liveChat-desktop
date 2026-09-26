@@ -7,7 +7,7 @@ import {
   session,
   type IpcMainInvokeEvent,
 } from 'electron';
-import { autoUpdater } from 'electron-updater';
+import electronUpdater from 'electron-updater';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { IPC_CHANNELS, PRODUCTION_APP_URL } from './constants';
@@ -26,11 +26,13 @@ import type {
   DesktopSessionResponse,
 } from '../preload/contracts';
 
+const { autoUpdater } = electronUpdater;
 const currentDirectory = dirname(fileURLToPath(import.meta.url));
 const preloadPath = join(currentDirectory, '../preload/index.mjs');
 const singleInstanceLock = app.requestSingleInstanceLock();
 let mainWindow: BrowserWindow | null = null;
 let callActive = false;
+let updateDownloaded = false;
 
 if (!singleInstanceLock) {
   app.quit();
@@ -142,6 +144,7 @@ function registerIpcHandlers() {
   });
   ipcMain.handle(IPC_CHANNELS.updaterInstall, event => {
     assertTrustedSender(event);
+    if (!updateDownloaded) throw new Error('Nenhuma atualização está pronta para instalar.');
     autoUpdater.quitAndInstall(false, true);
   });
 }
@@ -166,13 +169,21 @@ function showDesktopNotification(value: DesktopNotificationRequest) {
 function configureUpdater() {
   if (!app.isPackaged) return;
   autoUpdater.autoDownload = true;
-  autoUpdater.autoInstallOnAppQuit = true;
+  autoUpdater.autoInstallOnAppQuit = false;
   autoUpdater.on('update-downloaded', info => {
+    updateDownloaded = true;
     mainWindow?.webContents.send(IPC_CHANNELS.updaterReady, info.version);
+  });
+  autoUpdater.on('error', error => {
+    console.error('Falha ao verificar ou baixar atualização:', error.message);
   });
   mainWindow?.webContents.once('did-finish-load', () => {
     void autoUpdater.checkForUpdates().catch(() => undefined);
   });
+  const updateTimer = setInterval(() => {
+    void autoUpdater.checkForUpdates().catch(() => undefined);
+  }, 6 * 60 * 60 * 1000);
+  updateTimer.unref();
 }
 
 app.on('window-all-closed', () => {
