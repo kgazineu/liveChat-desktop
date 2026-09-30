@@ -48,7 +48,14 @@ export function secureWebContents(window: BrowserWindow) {
   });
 }
 
-async function selectDesktopSource(parent: BrowserWindow) {
+export function shouldUseSystemAudioLoopback(
+  audioRequested: boolean,
+  platform: NodeJS.Platform = process.platform,
+) {
+  return audioRequested && platform === 'win32';
+}
+
+async function selectDesktopSource(parent: BrowserWindow, audioRequested: boolean) {
   const sources = await desktopCapturer.getSources({
     types: ['screen', 'window'],
     fetchWindowIcons: true,
@@ -61,13 +68,22 @@ async function selectDesktopSource(parent: BrowserWindow) {
     type: 'question',
     title: 'Compartilhar tela ou janela',
     message: 'Escolha o conteúdo que será compartilhado',
-    detail: 'A captura pode ser interrompida a qualquer momento pelo botão “Parar compartilhamento” do LiveChat.',
+    detail: captureSelectionDetail(audioRequested),
     buttons: [...sources.map(source => source.name || 'Tela sem nome'), 'Cancelar'],
     cancelId,
     defaultId: 0,
     noLink: true,
   });
   return selection.response === cancelId ? null : sources[selection.response] ?? null;
+}
+
+function captureSelectionDetail(audioRequested: boolean) {
+  const stopHint = 'A captura pode ser interrompida a qualquer momento pelo botão “Parar compartilhamento” do LiveChat.';
+  if (!audioRequested) return stopHint;
+  if (shouldUseSystemAudioLoopback(true)) {
+    return `O áudio do sistema também será compartilhado. Use um headset para reduzir eco. ${stopHint}`;
+  }
+  return `O fallback de captura do Electron nesta plataforma fornece somente a imagem. ${stopHint}`;
 }
 
 export function configureSessionSecurity(electronSession: Session, getMainWindow: () => BrowserWindow | null) {
@@ -95,9 +111,15 @@ export function configureSessionSecurity(electronSession: Session, getMainWindow
     }
 
     try {
-      const source = await selectDesktopSource(mainWindow);
-      if (!source) callback({});
-      else callback({ video: source });
+      const source = await selectDesktopSource(mainWindow, request.audioRequested);
+      if (!source) {
+        callback({});
+        return;
+      }
+      callback({
+        video: source,
+        ...(shouldUseSystemAudioLoopback(request.audioRequested) ? { audio: 'loopback' as const } : {}),
+      });
     } catch {
       callback({});
     }

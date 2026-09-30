@@ -37,9 +37,13 @@ npm run typecheck
 npm run build
 ```
 
-## Compartilhamento de tela
+## Compartilhamento de tela e áudio
 
-O shell habilita `session.setDisplayMediaRequestHandler` com seletor do sistema quando disponível. Como fallback, lista telas e janelas usando `desktopCapturer`. O botão web “Parar compartilhamento” continua encerrando a faixa LiveKit imediatamente.
+O shell habilita `session.setDisplayMediaRequestHandler` com o seletor nativo no macOS 15+ quando disponível. Como fallback, lista telas e janelas usando `desktopCapturer`, sem expor `desktopCapturer`, `ipcRenderer` ou uma API genérica ao frontend remoto. Quando o frontend solicita áudio, o fallback inclui `audio: 'loopback'` no Windows; o Electron 44 não oferece loopback de áudio do sistema por esse handler no Linux ou macOS. Nessas plataformas, o áudio depende das opções fornecidas pelo seletor nativo/portal.
+
+O botão web “Parar compartilhamento” deve encerrar as tracks LiveKit de `ScreenShare` e `ScreenShareAudio`. Volume remoto, persistência do volume, reaplicação em novas tracks e prevenção de reprodução duplicada são responsabilidades do frontend/LiveKit, pois cada receptor controla esses elementos localmente.
+
+O loopback pode incluir qualquer som reproduzido no computador, inclusive a própria chamada. Recomende headset para reduzir eco acústico e informe no frontend quando o stream retornado por `getDisplayMedia()` não contiver uma track de áudio. No macOS, o bundle declara a finalidade de captura de áudio; a autorização de captura de tela é gerenciada pelo macOS em **Privacidade e Segurança → Gravação de Tela e Áudio do Sistema**.
 
 Validar manualmente antes de cada release:
 

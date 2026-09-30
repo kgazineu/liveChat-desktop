@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { isAllowedPermission } from '../src/main/security';
+import { isAllowedPermission, shouldUseSystemAudioLoopback } from '../src/main/security';
 
 describe('permissões do renderer remoto', () => {
   it('limita mídia a câmera e microfone', () => {
@@ -12,5 +12,12 @@ describe('permissões do renderer remoto', () => {
     expect(isAllowedPermission('notifications')).toBe(true);
     expect(isAllowedPermission('clipboard-read')).toBe(false);
     expect(isAllowedPermission('geolocation')).toBe(false);
+  });
+
+  it('habilita loopback somente quando solicitado no Windows', () => {
+    expect(shouldUseSystemAudioLoopback(true, 'win32')).toBe(true);
+    expect(shouldUseSystemAudioLoopback(false, 'win32')).toBe(false);
+    expect(shouldUseSystemAudioLoopback(true, 'linux')).toBe(false);
+    expect(shouldUseSystemAudioLoopback(true, 'darwin')).toBe(false);
   });
 });

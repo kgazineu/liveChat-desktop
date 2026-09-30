@@ -87,7 +87,8 @@
       "entitlementsInherit": "build/entitlements.mac.plist",
       "extendInfo": {
         "NSCameraUsageDescription": "O LiveChat usa a câmera somente quando você ativa o vídeo em uma chamada.",
-        "NSMicrophoneUsageDescription": "O LiveChat usa o microfone somente durante chamadas autorizadas por você."
+        "NSMicrophoneUsageDescription": "O LiveChat usa o microfone somente durante chamadas autorizadas por você.",
+        "NSAudioCaptureUsageDescription": "O LiveChat captura o áudio do sistema somente quando você solicita o compartilhamento com áudio."
       }
     },
     "nsis": {
