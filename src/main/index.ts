@@ -4,10 +4,12 @@ import {
   ipcMain,
   Menu,
   Notification,
+  screen,
   session,
   type IpcMainInvokeEvent,
 } from 'electron';
 import electronUpdater from 'electron-updater';
+import { readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { IPC_CHANNELS, PRODUCTION_APP_URL } from './constants';
@@ -20,6 +22,7 @@ import {
 } from './secure-session';
 import { configureSessionSecurity, secureWebContents } from './security';
 import { isAllowedAppUrl } from './url-policy';
+import { fitWindowState, MIN_WINDOW_SIZE, parseWindowState, type WindowState } from './window-state';
 import type {
   DesktopCallState,
   DesktopNotificationRequest,
@@ -59,15 +62,43 @@ async function startApplication() {
   });
 }
 
+function windowStatePath() {
+  return join(app.getPath('userData'), 'window-state.json');
+}
+
+function loadWindowState(): WindowState {
+  let saved: unknown = null;
+  try {
+    saved = JSON.parse(readFileSync(windowStatePath(), 'utf8'));
+  } catch {
+    // Primeira execução ou arquivo corrompido: usa o tamanho padrão.
+  }
+  return fitWindowState(parseWindowState(saved), screen.getAllDisplays().map(display => display.workArea));
+}
+
+function saveWindowState(window: BrowserWindow) {
+  if (window.isDestroyed()) return;
+  const bounds = window.getNormalBounds();
+  const state: WindowState = { ...bounds, maximized: window.isMaximized() };
+  try {
+    writeFileSync(windowStatePath(), JSON.stringify(state));
+  } catch {
+    // Não salvar a posição da janela não impede o uso do aplicativo.
+  }
+}
+
 function createMainWindow() {
+  const windowState = loadWindowState();
   const window = new BrowserWindow({
-    width: 1440,
-    height: 900,
-    minWidth: 960,
-    minHeight: 640,
+    width: windowState.width,
+    height: windowState.height,
+    ...(windowState.x != null && windowState.y != null ? { x: windowState.x, y: windowState.y } : {}),
+    minWidth: MIN_WINDOW_SIZE.width,
+    minHeight: MIN_WINDOW_SIZE.height,
     show: false,
     title: 'LiveChat',
-    backgroundColor: '#020617',
+    // Mesma cor da coluna de servidores, para que a janela não pisque em outro tom antes de carregar.
+    backgroundColor: '#1e1f22',
     autoHideMenuBar: true,
     webPreferences: {
       preload: preloadPath,
@@ -83,7 +114,11 @@ function createMainWindow() {
   mainWindow = window;
   secureWebContents(window);
 
-  window.once('ready-to-show', () => window.show());
+  window.once('ready-to-show', () => {
+    if (windowState.maximized) window.maximize();
+    window.show();
+  });
+  window.on('close', () => saveWindowState(window));
   window.on('closed', () => {
     if (mainWindow === window) mainWindow = null;
   });
